@@ -8,11 +8,12 @@
     "db:init": "tsx src/database/init.ts"
   },
   "dependencies": {
-    "@google/genai": "^2.22.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "groq-sdk": "^1.6.0",
     "multer": "^2.4.0",
+    "pdf-parse": "^2.4.5",
     "pg": "^8.23.0",
     "uuid": "^14.0.2"
   },
@@ -21,6 +22,7 @@
     "@types/express": "^5.0.6",
     "@types/multer": "^2.2.0",
     "@types/node": "^22.20.3",
+    "@types/pdf-parse": "^1.1.5",
     "@types/pg": "^8.23.1",
     "@types/uuid": "^10.0.0",
     "ts-node": "^10.9.2",

@@ -1,24 +1,27 @@
-import { GoogleGenAI } from '@google/genai';
+import Groq from 'groq-sdk';
 import { AiExtractionResult } from '../types/ai.types';
 import dotenv from 'dotenv';
 import fs from 'fs';
+import pdfParse from 'pdf-parse';
 
 dotenv.config();
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// The user must provide GROQ_API_KEY in their .env
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 export class AiService {
   /**
-   * Extracts data from a PDF document using Gemini API.
-   * Handles both text-based and scanned image-based PDFs.
+   * Extracts data from a PDF document using Groq API and an OSS Model.
    */
   static async extractDocumentData(filePath: string): Promise<AiExtractionResult | null> {
     try {
-      // Read file as base64
-      const fileBase64 = fs.readFileSync(filePath).toString('base64');
-      
+      // 1. Read and parse the PDF text locally (since Groq standard endpoints don't accept raw PDFs)
+      const dataBuffer = fs.readFileSync(filePath);
+      const pdfData = await pdfParse(dataBuffer);
+      const documentText = pdfData.text;
+
       const prompt = `
-        You are a highly skilled clinical document processor. Analyze the attached clinical document.
+        You are a highly skilled clinical document processor. Analyze the following clinical document text.
         
         1. Determine the primary document type: "BP" (Blood Pressure) or "A1C" (Hemoglobin A1c). If it's neither, return "UNKNOWN".
         2. Identify the patient's age if present.
@@ -28,7 +31,7 @@ export class AiService {
            - date: The date associated with the reading in YYYY-MM-DD format. If none, return null.
            - context: The context of the reading. If it says "goal", "target", "past", "previous", "historical", or "reference range", put that exact word. Otherwise, put "current".
 
-        Return ONLY a raw JSON object (without markdown code blocks) matching this schema:
+        Return ONLY a JSON object matching this schema. Do NOT wrap it in markdown block quotes.
         {
           "document_type": "BP" | "A1C" | "UNKNOWN",
           "patient_age": number | null,
@@ -41,38 +44,31 @@ export class AiService {
             }
           ]
         }
+        
+        Document Text:
+        """
+        ${documentText.slice(0, 15000)}
+        """
       `;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-1.5-pro',
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              { text: prompt },
-              {
-                inlineData: {
-                  mimeType: 'application/pdf',
-                  data: fileBase64,
-                },
-              },
-            ],
-          },
+      // 2. Send the text to Groq for JSON extraction
+      // Using Llama-3.3-70b-versatile as the large 70B parameter OSS model (closest to user's 120b request)
+      const response = await groq.chat.completions.create({
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'user', content: prompt }
         ],
-        config: {
-          temperature: 0.1, // Low temp for more deterministic extraction
-        }
+        temperature: 0.1, // Low temp for more deterministic extraction
+        response_format: { type: 'json_object' }
       });
 
-      let jsonStr = response.text || '{}';
-      // Clean up markdown formatting if Gemini still adds it
-      jsonStr = jsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
-
+      const jsonStr = response.choices[0]?.message?.content || '{}';
+      
       const result: AiExtractionResult = JSON.parse(jsonStr);
       return result;
 
     } catch (error) {
-      console.error('Error during AI extraction:', error);
+      console.error('Error during AI extraction with Groq:', error);
       return null;
     }
   }
