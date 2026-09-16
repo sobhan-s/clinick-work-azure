@@ -52,9 +52,14 @@ export async function uploadDocument(
     }
 
     console.error("Upload document error:", error);
+    
+    // Check if it's a known error with a message we can safely return
+    const errorMessage = error instanceof Error ? error.message : "Failed to upload document due to an internal error.";
+
     res.status(500).json({
       status: "error",
-      message: "Failed to upload document",
+      message: errorMessage,
+      details: error
     });
   }
 }
