@@ -2,12 +2,12 @@ import Groq from 'groq-sdk';
 import { AiExtractionResult } from '../types/ai.types';
 import dotenv from 'dotenv';
 import fs from 'fs';
-import pdfParse from 'pdf-parse';
+import path from 'path';
+const pdfParse = require('pdf-parse');
 
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
-// The user must provide GROQ_API_KEY in their .env
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+// Removed top-level Groq instantiation to prevent server crash on boot if .env is missing
 
 export class AiService {
   /**
@@ -15,6 +15,9 @@ export class AiService {
    */
   static async extractDocumentData(filePath: string): Promise<AiExtractionResult | null> {
     try {
+      // Initialize inside the method so we can catch errors gracefully if the key is missing
+      const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+      
       // 1. Read and parse the PDF text locally (since Groq standard endpoints don't accept raw PDFs)
       const dataBuffer = fs.readFileSync(filePath);
       const pdfData = await pdfParse(dataBuffer);
@@ -54,7 +57,7 @@ export class AiService {
       // 2. Send the text to Groq for JSON extraction
       // Using Llama-3.3-70b-versatile as the large 70B parameter OSS model (closest to user's 120b request)
       const response = await groq.chat.completions.create({
-        model: 'llama-3.3-70b-versatile',
+        model: 'openai/gpt-oss-120b',
         messages: [
           { role: 'user', content: prompt }
         ],
@@ -69,7 +72,7 @@ export class AiService {
 
     } catch (error) {
       console.error('Error during AI extraction with Groq:', error);
-      return null;
+      throw error; // Throw it so the DocumentService catches it and the user sees the real reason
     }
   }
 }
