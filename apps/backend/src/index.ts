@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import documentRoutes from './routes/document.routes';
 
 dotenv.config();
 
@@ -13,6 +14,13 @@ app.use(express.urlencoded({ extended: true }));
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'clinicworks-api' });
+});
+
+app.use('/api', documentRoutes);
+
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error(err.stack);
+  res.status(500).json({ status: 'error', message: 'Internal Server Error' });
 });
 
 app.listen(port, () => {
