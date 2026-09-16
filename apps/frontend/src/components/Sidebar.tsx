@@ -1,5 +1,4 @@
-import React from 'react';
-import { LayoutDashboard, FileText, Settings, Activity } from 'lucide-react';
+import { LayoutDashboard, FileText, Activity } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
   return (

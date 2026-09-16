@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import { Upload, RefreshCw, CheckCircle2, XCircle, AlertCircle, Search } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Upload, RefreshCw, CheckCircle2, XCircle, AlertCircle, Search, Loader2 } from 'lucide-react';
 import { documentService } from '../services/api';
-import { ProcessedDocument } from '../types';
+import type { ProcessedDocument } from '../types';
 import { UploadModal } from '../components/UploadModal';
 
 export const Dashboard: React.FC = () => {

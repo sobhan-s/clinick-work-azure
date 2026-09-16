@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { ApiResponse, ProcessedDocument } from '../types';
+import type { ApiResponse, ProcessedDocument } from '../types';
 
 const API_BASE_URL = 'http://localhost:3000/api';
 
