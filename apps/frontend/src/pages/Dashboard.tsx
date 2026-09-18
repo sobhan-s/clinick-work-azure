@@ -1,181 +1,551 @@
-import { useEffect, useState } from 'react';
-import { Upload, RefreshCw, CheckCircle2, XCircle, AlertCircle, Search, Loader2 } from 'lucide-react';
+import { useEffect, useState, useCallback } from 'react';
 import { documentService } from '../services/api';
 import type { ProcessedDocument } from '../types';
-import { UploadModal } from '../components/UploadModal';
 
-export const Dashboard: React.FC = () => {
-  const [documents, setDocuments] = useState<ProcessedDocument[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isUploadOpen, setIsUploadOpen] = useState(false);
-  const [retryingId, setRetryingId] = useState<string | null>(null);
+// ─── SVG icon components ──────────────────────────────────────────────────
 
-  const fetchDocuments = async () => {
-    setIsLoading(true);
+const DocIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+    strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+    <polyline points="14 2 14 8 20 8"/>
+    <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+  </svg>
+);
+const CheckIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+    strokeLinecap="round" strokeLinejoin="round">
+    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+  </svg>
+);
+const AlertIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+    strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10"/>
+    <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+  </svg>
+);
+const TrendIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+    strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
+    <polyline points="17 6 23 6 23 12"/>
+  </svg>
+);
+const SearchIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+    strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+  </svg>
+);
+const FolderIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
+    strokeLinecap="round" strokeLinejoin="round">
+    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+  </svg>
+);
+const UploadIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+    strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+    <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+  </svg>
+);
+const RetryIcon = ({ spin }: { spin?: boolean }) => (
+  <svg className={spin ? 'spin' : ''} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+  </svg>
+);
+const TrashIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+    strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="3 6 5 6 21 6"/>
+    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+    <path d="M10 11v6"/><path d="M14 11v6"/>
+    <path d="M9 6V4h6v2"/>
+  </svg>
+);
+const ErrIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+    strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10"/>
+    <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+  </svg>
+);
+
+// ─── Helpers ──────────────────────────────────────────────────────────────
+
+const MoreIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+    strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="6" r="1.5"/><circle cx="12" cy="18" r="1.5"/>
+  </svg>
+);
+
+type FilterTab = 'ALL' | 'PROCESSING' | 'SUCCESS' | 'NEEDS_REVIEW' | 'FAILED';
+
+function fmtDate(s: string | null): string {
+  if (!s) return '—';
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function statusCls(s: string | null) {
+  switch (s) {
+    case 'SUCCESS':      return 's-success';
+    case 'FAILED':       return 's-failed';
+    case 'NEEDS_REVIEW': return 's-review';
+    default:             return 's-processing';
+  }
+}
+function statusLabel(s: string | null) {
+  switch (s) {
+    case 'SUCCESS':      return 'Success';
+    case 'FAILED':       return 'Failed';
+    case 'NEEDS_REVIEW': return 'Needs Review';
+    case 'PROCESSING':   return 'Processing';
+    default:             return 'Processing';
+  }
+}
+function typeCls(t: string | null) {
+  if (t === 'BP')    return 'bp';
+  if (t === 'HbA1c') return 'a1c';
+  return 'none';
+}
+function typeLabel(t: string | null) {
+  if (t === 'BP')    return '🩺 BP';
+  if (t === 'HbA1c') return '🧪 HbA1c';
+  return '—';
+}
+function confCls(v: number | null) {
+  if (v === null) return 'low';
+  if (v >= 0.8)  return 'high';
+  if (v >= 0.6)  return 'medium';
+  return 'low';
+}
+
+// ─── Component ────────────────────────────────────────────────────────────
+
+interface DashboardProps {
+  refreshKey: number;
+  onUploadClick: () => void;
+}
+
+export const Dashboard: React.FC<DashboardProps> = ({ refreshKey, onUploadClick }) => {
+  const [docs, setDocs]       = useState<ProcessedDocument[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [fetchErr, setFetchErr] = useState<string | null>(null);
+  const [search, setSearch]   = useState('');
+  const [tab, setTab]         = useState<FilterTab>('ALL');
+  const [retryId, setRetryId] = useState<string | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);     // spinning
+  const [confirmId, setConfirmId] = useState<string | null>(null);   // confirm prompt
+  const [menuId, setMenuId]     = useState<string | null>(null);     // open dropdown
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    if (!menuId) return;
+    const close = () => setMenuId(null);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [menuId]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setFetchErr(null);
     try {
       const data = await documentService.getAllDocuments();
-      setDocuments(data);
-    } catch (error) {
-      console.error("Failed to fetch documents", error);
+      setDocs(data);
+    } catch (e: any) {
+      setFetchErr(e.message ?? 'Failed to load documents');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchDocuments();
   }, []);
 
+  useEffect(() => { load(); }, [load, refreshKey]);
+
+  // Auto-refresh when processing
+  useEffect(() => {
+    if (!docs.some(d => d.status === 'PROCESSING')) return;
+    const t = setInterval(load, 7000);
+    return () => clearInterval(t);
+  }, [docs, load]);
+
+  // ── Stats ─────────────────────────────────────────────────────────────
+  const total     = docs.length;
+  const success   = docs.filter(d => d.status === 'SUCCESS').length;
+  const review    = docs.filter(d => d.status === 'NEEDS_REVIEW').length;
+  const failed    = docs.filter(d => d.status === 'FAILED').length;
+  const processing = docs.filter(d => d.status === 'PROCESSING').length;
+
+  const validConf = docs
+    .filter(d => d.confidence_score !== null && d.status === 'SUCCESS')
+    .map(d => parseFloat(d.confidence_score as any));
+  const avgConf = validConf.length
+    ? Math.round((validConf.reduce((a, b) => a + b, 0) / validConf.length) * 100)
+    : null;
+
+  // ── Filter + Search ───────────────────────────────────────────────────
+  const tabCounts: Record<FilterTab, number> = {
+    ALL:         total,
+    PROCESSING:  processing,
+    SUCCESS:     success,
+    NEEDS_REVIEW: review,
+    FAILED:      failed,
+  };
+
+  const filtered = docs.filter(d => {
+    const matchTab =
+      tab === 'ALL' ||
+      (tab === 'SUCCESS'      && d.status === 'SUCCESS') ||
+      (tab === 'FAILED'       && d.status === 'FAILED') ||
+      (tab === 'NEEDS_REVIEW' && d.status === 'NEEDS_REVIEW') ||
+      (tab === 'PROCESSING'   && d.status === 'PROCESSING');
+
+    if (!matchTab) return false;
+
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (
+      d.document_name.toLowerCase().includes(q) ||
+      (d.result_type ?? '').toLowerCase().includes(q) ||
+      (d.status ?? '').toLowerCase().includes(q) ||
+      (d.extracted_measure ?? '').toLowerCase().includes(q)
+    );
+  });
+
+  // ── Retry ─────────────────────────────────────────────────────────────
   const handleRetry = async (id: string) => {
-    setRetryingId(id);
+    setRetryId(id);
     try {
       await documentService.retryDocument(id);
-      await fetchDocuments();
-    } catch (error) {
-      console.error("Failed to retry", error);
+      await load();
+    } catch (e) {
+      console.error('Retry failed', e);
     } finally {
-      setRetryingId(null);
+      setRetryId(null);
     }
   };
 
-  const getStatusIcon = (status: string | null) => {
-    switch (status) {
-      case 'SUCCESS': return <CheckCircle2 className="w-4 h-4 text-emerald-500" />;
-      case 'FAILED': return <XCircle className="w-4 h-4 text-red-500" />;
-      case 'NEEDS_REVIEW': return <AlertCircle className="w-4 h-4 text-amber-500" />;
-      case 'PROCESSING': return <RefreshCw className="w-4 h-4 text-blue-500 animate-spin" />;
-      default: return <AlertCircle className="w-4 h-4 text-slate-400" />;
+  const handleDelete = async (id: string) => {
+    setDeleteId(id);
+    setConfirmId(null);
+    try {
+      await documentService.deleteDocument(id);
+      await load();
+    } catch (e) {
+      console.error('Delete failed', e);
+    } finally {
+      setDeleteId(null);
     }
   };
 
-  const getStatusBadge = (status: string | null) => {
-    switch (status) {
-      case 'SUCCESS': return "bg-emerald-50 text-emerald-700 border-emerald-200";
-      case 'FAILED': return "bg-red-50 text-red-700 border-red-200";
-      case 'NEEDS_REVIEW': return "bg-amber-50 text-amber-700 border-amber-200";
-      case 'PROCESSING': return "bg-blue-50 text-blue-700 border-blue-200";
-      default: return "bg-slate-50 text-slate-700 border-slate-200";
-    }
-  };
-
+  // ─────────────────────────────────────────────────────────────────────
   return (
-    <div className="flex-1 p-8 bg-slate-50 min-h-screen">
-      <div className="max-w-6xl mx-auto">
-        
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Processed Documents</h1>
-            <p className="text-slate-500 mt-1">Manage and monitor AI extraction results from clinical PDFs.</p>
+    <>
+      {/* ── Stats Row ────────────────────────────────── */}
+      <div className="stats-row">
+        {/* Total */}
+        <div className="stat-card">
+          <div className="stat-card-top">
+            <div className="stat-label">Total Documents</div>
+            <div className="stat-icon-wrap blue"><DocIcon /></div>
           </div>
-          <button 
-            onClick={() => setIsUploadOpen(true)}
-            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-all shadow-lg shadow-blue-600/30 flex items-center gap-2"
-          >
-            <Upload className="w-5 h-5" />
-            Upload Document
-          </button>
+          <div className="stat-number">{total}</div>
+          <div className="stat-sub">All processed or reviewed</div>
         </div>
 
-        {/* Filters / Search Bar (Dummy for UI polish) */}
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 mb-6">
-          <div className="relative flex-1 max-w-md">
-            <Search className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input 
-              type="text" 
-              placeholder="Search documents by name or type..." 
-              className="w-full pl-10 pr-4 py-2 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-blue-100 text-sm outline-none"
-            />
+        {/* Successful */}
+        <div className="stat-card">
+          <div className="stat-card-top">
+            <div className="stat-label">Successful</div>
+            <div className="stat-icon-wrap green"><CheckIcon /></div>
           </div>
-          <button onClick={fetchDocuments} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors ml-auto">
-            <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
-          </button>
+          <div className="stat-number">{success}</div>
+          <div className="stat-sub">{total > 0 ? `${Math.round((success/total)*100)}% success rate` : 'No data yet'}</div>
         </div>
 
-        {/* Table */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm whitespace-nowrap">
-              <thead className="bg-slate-50/50 text-slate-500 font-medium border-b border-slate-100">
-                <tr>
-                  <th className="px-6 py-4">Document</th>
-                  <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4">Type</th>
-                  <th className="px-6 py-4">Extracted Measure</th>
-                  <th className="px-6 py-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {isLoading ? (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
-                      <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
-                      Loading documents...
-                    </td>
-                  </tr>
-                ) : documents.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
-                      No documents found. Upload one to get started!
-                    </td>
-                  </tr>
-                ) : (
-                  documents.map((doc) => (
-                    <tr key={doc.document_id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="font-medium text-slate-800">{doc.document_name}</div>
-                        <div className="text-xs text-slate-400 mt-0.5">ID: {doc.document_id.split('-')[0]} • {new Date(doc.uploaded_at).toLocaleDateString()}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${getStatusBadge(doc.status)}`}>
-                          {getStatusIcon(doc.status)}
-                          {doc.status || 'UNKNOWN'}
-                        </div>
-                        {doc.error_message && (
-                          <div className="text-xs text-red-500 mt-1 max-w-[200px] truncate" title={doc.error_message}>
-                            {doc.error_message}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="text-slate-600 font-medium bg-slate-100 px-2 py-1 rounded-md">{doc.result_type || 'N/A'}</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        {doc.extracted_measure ? (
-                          <div>
-                            <span className="font-bold text-slate-800">{doc.extracted_measure}</span>
-                            {doc.measure_date && <span className="text-xs text-slate-400 ml-2">on {new Date(doc.measure_date).toLocaleDateString()}</span>}
-                          </div>
-                        ) : (
-                          <span className="text-slate-300">-</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        {(doc.status === 'FAILED' || doc.status === 'NEEDS_REVIEW') && (
-                          <button 
-                            onClick={() => handleRetry(doc.document_id)}
-                            disabled={retryingId === doc.document_id}
-                            className="px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 bg-white border border-blue-200 rounded-lg transition-colors disabled:opacity-50 inline-flex items-center gap-1"
-                          >
-                            <RefreshCw className={`w-3 h-3 ${retryingId === doc.document_id ? 'animate-spin' : ''}`} />
-                            Retry
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+        {/* Needs Review */}
+        <div className="stat-card">
+          <div className="stat-card-top">
+            <div className="stat-label">Needs Review</div>
+            <div className="stat-icon-wrap amber"><AlertIcon /></div>
           </div>
+          <div className="stat-number">{review}</div>
+          <div className="stat-sub">{failed > 0 ? `${failed} extraction error${failed>1?'s':''}` : 'No extraction errors'}</div>
+        </div>
+
+        {/* Avg Confidence */}
+        <div className="stat-card">
+          <div className="stat-card-top">
+            <div className="stat-label">Avg Confidence</div>
+            <div className="stat-icon-wrap purple"><TrendIcon /></div>
+          </div>
+          <div className="stat-number">
+            {avgConf !== null ? `${avgConf}%` : <span style={{ fontSize: 24, fontWeight: 400, color: 'var(--text-4)' }}>—</span>}
+          </div>
+          <div className="stat-sub">Model certainty</div>
         </div>
       </div>
 
-      <UploadModal 
-        isOpen={isUploadOpen} 
-        onClose={() => setIsUploadOpen(false)} 
-        onSuccess={fetchDocuments}
-      />
-    </div>
+      {/* ── Error Banner ─────────────────────────────── */}
+      {fetchErr && (
+        <div className="error-banner">
+          <ErrIcon />
+          <span>Failed to load documents: {fetchErr}</span>
+        </div>
+      )}
+
+      {/* ── Documents Panel ──────────────────────────── */}
+      <div className="docs-panel">
+
+        {/* toolbar */}
+        <div className="panel-toolbar">
+          <div className="search-field">
+            <SearchIcon />
+            <input
+              id="doc-search"
+              type="text"
+              placeholder="Search by ID, filename, measure, type or p…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+
+          <div className="filter-tabs">
+            {(['ALL', 'PROCESSING', 'SUCCESS', 'NEEDS_REVIEW', 'FAILED'] as FilterTab[]).map(t => {
+              const countCls =
+                t === 'SUCCESS'      ? 'success-count' :
+                t === 'NEEDS_REVIEW' ? 'review-count' :
+                t === 'FAILED'       ? 'failed-count' :
+                t === 'PROCESSING'   ? 'processing-count' : '';
+              return (
+                <button
+                  key={t}
+                  id={`filter-${t.toLowerCase()}`}
+                  className={`filter-tab ${tab === t ? 'active' : ''}`}
+                  onClick={() => setTab(t)}
+                >
+                  {t === 'ALL' ? 'All' :
+                   t === 'NEEDS_REVIEW' ? 'Needs Review' :
+                   t.charAt(0) + t.slice(1).toLowerCase()}
+                  <span className={`tab-count ${tab === t ? '' : countCls}`}>
+                    {tabCounts[t]}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="toolbar-spacer" />
+          <span className="records-count">{filtered.length} record{filtered.length !== 1 ? 's' : ''}</span>
+        </div>
+
+        {/* table */}
+        <div className="table-wrap">
+          <table className="data-table">
+          <thead>
+            <tr>
+              <th>Document</th>
+              <th>Type</th>
+              <th>Status</th>
+              <th>Extracted Value</th>
+              <th>Measure Date</th>
+              <th>Confidence</th>
+              <th>Attempts</th>
+              <th>Uploaded</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              Array.from({ length: 4 }).map((_, i) => (
+                <tr key={i}>
+                  {Array.from({ length: 9 }).map((_, j) => (
+                    <td key={j}>
+                      <div className="skel" style={{ width: j === 0 ? '130px' : j === 5 ? '90px' : '60px' }} />
+                    </td>
+                  ))}
+                </tr>
+              ))
+            ) : filtered.length === 0 ? (
+              <tr>
+                <td colSpan={9}>
+                  <div className="empty-wrap">
+                    <div className="empty-icon-wrap"><FolderIcon /></div>
+                    <div className="empty-title">
+                      {search || tab !== 'ALL'
+                        ? 'No documents match your filter'
+                        : 'No documents uploaded yet'}
+                    </div>
+                    <div className="empty-sub">
+                      {(!search && tab === 'ALL')
+                        ? 'Upload a clinical PDF to automatically extract BP or HbA1c values.'
+                        : 'Try adjusting your search or filter.'}
+                    </div>
+                    {!search && tab === 'ALL' && (
+                      <button className="btn btn-primary" id="empty-upload-btn" onClick={onUploadClick}>
+                        <UploadIcon />
+                        Upload Document
+                      </button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              filtered.map(doc => {
+                const sCls   = statusCls(doc.status);
+                const tCls   = typeCls(doc.result_type);
+                const confFloat = doc.confidence_score !== null ? parseFloat(doc.confidence_score as any) : null;
+                const cCls   = confCls(confFloat);
+                const confPct = confFloat !== null
+                  ? Math.round(confFloat * 100)
+                  : null;
+                const canRetry = doc.status === 'FAILED' || doc.status === 'NEEDS_REVIEW';
+
+                return (
+                  <tr key={doc.document_id} id={`row-${doc.document_id}`}>
+                    {/* Doc */}
+                    <td>
+                      <div className="doc-name" title={doc.document_name}>{doc.document_name}</div>
+                      <div className="doc-id">{doc.document_id.slice(0, 8)}</div>
+                    </td>
+
+                    {/* Type */}
+                    <td>
+                      <span className={`type-tag ${tCls}`}>{typeLabel(doc.result_type)}</span>
+                    </td>
+
+                    {/* Status — clean error message, no raw JSON */}
+                    <td>
+                      <span className={`status-pill ${sCls}`}>
+                        <span className="status-dot" />
+                        {statusLabel(doc.status)}
+                      </span>
+                      {doc.error_message && (
+                        <div className="err-row" title={doc.error_message}>
+                          {doc.error_message.length > 55
+                            ? doc.error_message.slice(0, 52) + '…'
+                            : doc.error_message}
+                          <div className="err-tooltip">
+                            <strong>{doc.error_code ?? 'Error'}:</strong><br />
+                            {doc.error_message}
+                          </div>
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Extracted Value */}
+                    <td>
+                      {doc.extracted_measure
+                        ? <div className="measure-val">{doc.extracted_measure}</div>
+                        : <span style={{ color: 'var(--text-4)' }}>—</span>}
+                    </td>
+
+                    {/* Measure Date */}
+                    <td>
+                      <span style={{ fontSize: 13, color: 'var(--text-2)' }}>
+                        {fmtDate(doc.measure_date)}
+                      </span>
+                    </td>
+
+                    {/* Confidence */}
+                    <td>
+                      {confPct !== null ? (
+                        <div className="conf-wrap">
+                          <div className="conf-track">
+                            <div className={`conf-fill ${cCls}`} style={{ width: `${confPct}%` }} />
+                          </div>
+                          <span className="conf-pct">{confPct}%</span>
+                        </div>
+                      ) : <span style={{ color: 'var(--text-4)' }}>—</span>}
+                    </td>
+
+                    {/* Attempts */}
+                    <td>
+                      <span className="att-badge">{doc.processing_attempt ?? 1}</span>
+                    </td>
+
+                    {/* Uploaded */}
+                    <td>
+                      <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                        {fmtDate(doc.uploaded_at)}
+                      </span>
+                    </td>
+
+                    {/* Actions — 3 Dots Menu */}
+                    <td>
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        {confirmId === doc.document_id ? (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <span style={{ fontSize: 11, color: 'var(--failed)', fontWeight: 500 }}>Sure?</span>
+                            <button
+                              className="btn-retry"
+                              style={{ background: '#fef2f2', color: 'var(--failed)', borderColor: '#fecaca', padding: '4px 8px' }}
+                              onClick={() => handleDelete(doc.document_id)}
+                              disabled={deleteId === doc.document_id}
+                            >
+                              {deleteId === doc.document_id ? '…' : 'Yes'}
+                            </button>
+                            <button className="icon-btn" onClick={() => setConfirmId(null)} title="Cancel">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                                strokeLinecap="round" strokeLinejoin="round" style={{width: 14, height: 14}}>
+                                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                              </svg>
+                            </button>
+                          </span>
+                        ) : (
+                          <>
+                            <button
+                              className={`icon-btn ${menuId === doc.document_id ? 'active' : ''}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setMenuId(menuId === doc.document_id ? null : doc.document_id);
+                              }}
+                            >
+                              <MoreIcon />
+                            </button>
+
+                            {/* Dropdown Menu */}
+                            {menuId === doc.document_id && (
+                              <div className="action-menu" onClick={(e) => e.stopPropagation()}>
+                                {canRetry && (
+                                  <button
+                                    className="action-menu-item"
+                                    onClick={() => { setMenuId(null); handleRetry(doc.document_id); }}
+                                    disabled={retryId === doc.document_id}
+                                  >
+                                    <span style={{ width: 14, height: 14, display: 'inline-flex' }}>
+                                      <RetryIcon spin={retryId === doc.document_id} />
+                                    </span>
+                                    {retryId === doc.document_id ? 'Retrying…' : 'Retry'}
+                                  </button>
+                                )}
+                                <button
+                                  className="action-menu-item delete"
+                                  onClick={() => { setMenuId(null); setConfirmId(doc.document_id); }}
+                                >
+                                  <span style={{ width: 14, height: 14, display: 'inline-flex' }}><TrashIcon /></span>
+                                  Delete
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+        </div>
+      </div>
+    </>
   );
 };

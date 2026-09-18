@@ -1,116 +1,170 @@
-import React, { useCallback, useState } from 'react';
-import { UploadCloud, X, File, Loader2 } from 'lucide-react';
+import { useCallback, useState } from 'react';
 import { documentService } from '../services/api';
 
-interface UploadModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+interface Props {
+  isOpen:    boolean;
+  onClose:   () => void;
   onSuccess: () => void;
 }
 
-export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onSuccess }) => {
-  const [file, setFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export const UploadModal: React.FC<Props> = ({ isOpen, onClose, onSuccess }) => {
+  const [file, setFile]       = useState<File | null>(null);
+  const [over, setOver]       = useState(false);
+  const [busy, setBusy]       = useState(false);
+  const [result, setResult]   = useState<{ ok: boolean; data?: any; err?: string } | null>(null);
 
-  const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      setFile(e.dataTransfer.files[0]);
-    }
+  const reset = () => { setFile(null); setResult(null); setOver(false); };
+  const close = () => { reset(); onClose(); };
+
+  const pick = (f: File) => { setFile(f); setResult(null); };
+
+  const drop = useCallback((e: React.DragEvent) => {
+    e.preventDefault(); setOver(false);
+    const f = e.dataTransfer.files[0];
+    if (f) pick(f);
   }, []);
 
-  const handleUpload = async () => {
+  const upload = async () => {
     if (!file) return;
-    setIsUploading(true);
-    setError(null);
+    setBusy(true); setResult(null);
     try {
-      await documentService.uploadDocument(file);
+      const res = await documentService.uploadDocument(file);
+      setResult({ ok: true, data: res });
       onSuccess();
-      setFile(null);
-      onClose();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Upload failed. Please try again.');
+    } catch (e: any) {
+      setResult({ ok: false, err: e.response?.data?.message ?? e.message ?? 'Upload failed' });
     } finally {
-      setIsUploading(false);
+      setBusy(false);
     }
   };
 
   if (!isOpen) return null;
 
+  const pr = result?.data?.processing_result ?? result?.data?.result;
+
   return (
-    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
-        <div className="flex justify-between items-center p-6 border-b border-slate-100">
-          <h2 className="text-xl font-semibold text-slate-800">Upload Clinical Document</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
-            <X className="w-5 h-5" />
+    <div className="modal-backdrop" id="upload-backdrop"
+      onClick={e => e.target === e.currentTarget && close()}>
+      <div className="modal-sheet" id="upload-sheet">
+
+        {/* head */}
+        <div className="modal-head">
+          <h2>Upload Clinical Document</h2>
+          <button className="icon-btn" id="modal-close" onClick={close} aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+              strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
           </button>
         </div>
-        
-        <div className="p-6">
-          <div 
-            onDrop={handleDrop}
-            onDragOver={(e) => e.preventDefault()}
-            className="border-2 border-dashed border-slate-200 rounded-xl p-8 flex flex-col items-center justify-center bg-slate-50 hover:bg-slate-100 hover:border-blue-400 transition-all cursor-pointer group"
+
+        {/* body */}
+        <div className="modal-body">
+          <div
+            className={`drop-zone ${over ? 'over' : ''}`}
+            onDrop={drop}
+            onDragOver={e => { e.preventDefault(); setOver(true); }}
+            onDragLeave={() => setOver(false)}
+            onClick={() => document.getElementById('file-hidden')?.click()}
           >
-            <div className="w-16 h-16 bg-blue-100 text-blue-500 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-              <UploadCloud className="w-8 h-8" />
+            <div className="dz-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="16 16 12 12 8 16"/>
+                <line x1="12" y1="12" x2="12" y2="21"/>
+                <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+              </svg>
             </div>
-            <p className="text-slate-600 font-medium text-center">
-              Drag and drop your PDF here<br/>
-              <span className="text-sm text-slate-400 font-normal">or click to browse files</span>
-            </p>
-            <input 
-              type="file" 
-              className="hidden" 
-              id="fileInput" 
-              accept="application/pdf,image/*" 
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
-            />
-            <button 
-              onClick={() => document.getElementById('fileInput')?.click()}
-              className="mt-4 px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
-            >
-              Select File
+            <div className="dz-title">Drop your PDF here</div>
+            <div className="dz-sub">Blood pressure reports or HbA1c lab results</div>
+            <button className="btn btn-outline" type="button"
+              onClick={e => { e.stopPropagation(); document.getElementById('file-hidden')?.click(); }}
+              id="browse-btn">
+              Browse Files
             </button>
           </div>
 
-          {file && (
-            <div className="mt-4 p-4 bg-emerald-50 border border-emerald-100 rounded-xl flex items-center gap-3">
-              <File className="w-5 h-5 text-emerald-500" />
-              <div className="flex-1 truncate">
-                <p className="text-sm font-medium text-emerald-800 truncate">{file.name}</p>
-                <p className="text-xs text-emerald-600">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+          <input id="file-hidden" type="file" accept="application/pdf"
+            style={{ display: 'none' }}
+            onChange={e => { const f = e.target.files?.[0]; if (f) pick(f); }} />
+
+          {/* selected file chip */}
+          {file && !result && (
+            <div className="file-chip">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="file-chip-name">{file.name}</div>
+                <div className="file-chip-size">{(file.size / 1024).toFixed(1)} KB</div>
               </div>
-              <button onClick={() => setFile(null)} className="text-emerald-500 hover:text-emerald-700">
-                <X className="w-4 h-4" />
+              <button className="icon-btn" onClick={e => { e.stopPropagation(); reset(); }} title="Remove">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                  strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
               </button>
             </div>
           )}
 
-          {error && (
-            <div className="mt-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100">
-              {error}
+          {/* result */}
+          {result?.ok && (
+            <div className="result-box ok">
+              <div className="result-box-head">✓ Processing complete</div>
+              {pr && (
+                <div className="result-grid">
+                  <span className="k">Type</span>
+                  <span className="v">{pr.document_type ?? pr.result_type ?? '—'}</span>
+                  <span className="k">Status</span>
+                  <span className="v">{pr.status}</span>
+                  <span className="k">Extracted</span>
+                  <span className="v">{pr.extracted_measure ?? '—'}</span>
+                  <span className="k">Confidence</span>
+                  <span className="v">
+                    {pr.confidence_score != null
+                      ? `${Math.round(pr.confidence_score * 100)}%` : '—'}
+                  </span>
+                  {pr.error_message && (
+                    <>
+                      <span className="k">Note</span>
+                      <span className="v" style={{ color: 'var(--review)' }}>{pr.error_message}</span>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {result?.ok === false && (
+            <div className="result-box err">
+              <div className="result-box-head">✗ Upload failed</div>
+              <div style={{ fontSize: 12, color: 'var(--failed)', marginTop: 4 }}>{result.err}</div>
             </div>
           )}
         </div>
 
-        <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
-          <button 
-            onClick={onClose}
-            className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-xl transition-colors"
-          >
-            Cancel
-          </button>
-          <button 
-            onClick={handleUpload}
-            disabled={!file || isUploading}
-            className="px-5 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-colors shadow-lg shadow-blue-600/30 flex items-center gap-2"
-          >
-            {isUploading && <Loader2 className="w-4 h-4 animate-spin" />}
-            {isUploading ? 'Processing...' : 'Upload & Process'}
-          </button>
+        {/* footer */}
+        <div className="modal-foot">
+          {result?.ok ? (
+            <button className="btn btn-primary" id="modal-done" onClick={close}>Done</button>
+          ) : (
+            <>
+              <button className="btn btn-outline" id="modal-cancel" onClick={close}>Cancel</button>
+              <button className="btn btn-primary" id="modal-upload"
+                onClick={upload} disabled={!file || busy}>
+                {busy && (
+                  <svg className="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                    style={{ width: 14, height: 14 }}>
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                  </svg>
+                )}
+                {busy ? 'Processing…' : 'Upload & Process'}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
