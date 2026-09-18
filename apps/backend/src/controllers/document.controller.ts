@@ -52,9 +52,14 @@ export async function uploadDocument(
     }
 
     console.error("Upload document error:", error);
+    
+    // Check if it's a known error with a message we can safely return
+    const errorMessage = error instanceof Error ? error.message : "Failed to upload document due to an internal error.";
+
     res.status(500).json({
       status: "error",
-      message: "Failed to upload document",
+      message: errorMessage,
+      details: error
     });
   }
 }
@@ -97,16 +102,27 @@ export async function retryDocument(
     console.error("Retry document error:", error);
 
     if (error instanceof Error) {
-      res.status(400).json({
-        status: "error",
-        message: error.message,
-      });
+      res.status(400).json({ status: "error", message: error.message });
       return;
     }
+    res.status(500).json({ status: "error", message: "Failed to retry document" });
+  }
+}
 
-    res.status(500).json({
-      status: "error",
-      message: "Failed to retry document",
-    });
+export async function deleteDocument(
+  req: Request,
+  res: Response
+): Promise<void> {
+  try {
+    const id = req.params.id as string;
+    await DocumentService.deleteDocument(id);
+    res.status(200).json({ status: "success", message: "Document deleted" });
+  } catch (error) {
+    console.error("Delete document error:", error);
+    if (error instanceof Error) {
+      res.status(404).json({ status: "error", message: error.message });
+      return;
+    }
+    res.status(500).json({ status: "error", message: "Failed to delete document" });
   }
 }
