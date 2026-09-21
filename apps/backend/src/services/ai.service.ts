@@ -31,10 +31,10 @@
  */
 
 import Groq from 'groq-sdk';
-import fs from 'fs';
-import path from 'path';
 import dotenv from 'dotenv';
+import path from 'path';
 import { ClinicalExtractionResult } from '../types/ai.types';
+import { containerClient } from '../utils/blob';
 
 const PDFParser = require('pdf2json');
 
@@ -108,10 +108,10 @@ Rules:
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 /**
- * Extract raw text from a PDF file using pdf2json.
+ * Extract raw text from a PDF file using pdf2json from a memory buffer.
  * Returns null if the file is not readable or too short (scanned PDF).
  */
-async function extractTextFromPdf(filePath: string): Promise<string | null> {
+async function extractTextFromPdf(pdfBuffer: Buffer): Promise<string | null> {
   return new Promise((resolve) => {
     const pdfParser = new PDFParser(null, 1); // 1 = raw text mode
 
@@ -131,7 +131,7 @@ async function extractTextFromPdf(filePath: string): Promise<string | null> {
       }
     });
 
-    pdfParser.loadPDF(filePath);
+    pdfParser.parseBuffer(pdfBuffer);
   });
 }
 
@@ -173,15 +173,19 @@ export class AiService {
    *   - Unparseable JSON response
    */
   static async extractFromDocument(
-    filePath: string,
+    blobName: string,
     fileName: string,
     correlationId: string
   ): Promise<ClinicalExtractionResult> {
     const label = `[AI][${correlationId}]`;
 
     // ── Step 1: Extract text from PDF ─────────────────────────────────────
+    console.log(`${label} Downloading PDF from Blob Storage: ${blobName}`);
+    const blobClient = containerClient.getBlockBlobClient(blobName);
+    const pdfBuffer = await blobClient.downloadToBuffer();
+
     console.log(`${label} Extracting text from PDF: ${fileName}`);
-    const documentText = await extractTextFromPdf(filePath);
+    const documentText = await extractTextFromPdf(pdfBuffer);
 
     if (!documentText) {
       throw new Error(
