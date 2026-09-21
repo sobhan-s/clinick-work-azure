@@ -19,22 +19,11 @@
  * ──────────────────────────────────────────────────────────────
  */
 
-import fs from 'fs';
-import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { DocumentRepository } from '../repositories/document.repository';
 import { AiService } from './ai.service';
 import { applyBusinessRules } from './rules.engine';
-
-// ─── Helpers ──────────────────────────────────────────────────────────────
-
-function ensureUploadDir(): string {
-  const uploadDir = path.join(process.cwd(), 'uploads');
-  if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-  }
-  return uploadDir;
-}
+import { containerClient } from '../utils/blob';
 
 // ─── Service ──────────────────────────────────────────────────────────────
 
@@ -53,17 +42,16 @@ export class DocumentService {
 
     console.log(`${label} Starting upload for: "${fileName}", processedBy: ${processedBy}`);
 
-    // ── 1. Save file to disk ─────────────────────────────────────────────
-    const uploadDir = ensureUploadDir();
+    // ── 1. Upload file to Azure Blob Storage ─────────────────────────────
     const storedFileName = `${uuidv4()}-${fileName}`;
-    const storagePath = path.join(uploadDir, storedFileName);
-    fs.writeFileSync(storagePath, fileBuffer);
-    console.log(`${label} File saved to: ${storagePath}`);
+    console.log(`${label} Uploading to Blob Storage: ${storedFileName}`);
+    const blockBlobClient = containerClient.getBlockBlobClient(storedFileName);
+    await blockBlobClient.uploadData(fileBuffer);
 
     // ── 2. Create document record ─────────────────────────────────────────
     const document = await DocumentRepository.createDocument({
       document_name: fileName,
-      storage_path:  storagePath,
+      storage_path:  storedFileName,
       processed_by:  processedBy,
     });
     console.log(`${label} Document record created: ${document.id}`);
@@ -79,7 +67,7 @@ export class DocumentService {
     // ── 4 & 5. AI extraction + Rules engine ──────────────────────────────
     const decision = await DocumentService._runProcessingPipeline(
       document.id!,
-      storagePath,
+      storedFileName,
       fileName,
       1,
       correlationId
@@ -117,10 +105,11 @@ export class DocumentService {
       throw new Error(`Document not found: ${documentId}`);
     }
 
-    // Check the file still exists on disk
-    if (!fs.existsSync(document.storage_path)) {
+    // Check the file still exists in Blob Storage
+    const blobClient = containerClient.getBlockBlobClient(document.storage_path);
+    if (!(await blobClient.exists())) {
       throw new Error(
-        `Original file no longer exists at ${document.storage_path}. Cannot retry.`
+        `Original file no longer exists in Blob Storage at ${document.storage_path}. Cannot retry.`
       );
     }
 
@@ -170,7 +159,7 @@ export class DocumentService {
    */
   private static async _runProcessingPipeline(
     documentId:    string,
-    storagePath:   string,
+    blobName:      string,
     fileName:      string,
     attempt:       number,
     correlationId: string
@@ -179,7 +168,7 @@ export class DocumentService {
 
     try {
       // ── AI Extraction ─────────────────────────────────────────────────
-      const extraction = await AiService.extractFromDocument(storagePath, fileName, correlationId);
+      const extraction = await AiService.extractFromDocument(blobName, fileName, correlationId);
 
       // ── Business Rules ────────────────────────────────────────────────
       const decision = applyBusinessRules(extraction, fileName, correlationId);
@@ -218,12 +207,12 @@ export class DocumentService {
     // Delete from DB (CASCADE removes processing_results too)
     await DocumentRepository.deleteDocument(documentId);
 
-    // Best-effort: remove file from disk
+    // Best-effort: remove file from Blob Storage
     try {
-      if (fs.existsSync(document.storage_path)) {
-        fs.unlinkSync(document.storage_path);
-      }
-    } catch {
+      const blobClient = containerClient.getBlockBlobClient(document.storage_path);
+      await blobClient.deleteIfExists();
+    } catch (err: any) {
+      console.error(`Failed to delete blob ${document.storage_path}:`, err.message);
       // Non-fatal — DB record is deleted, file cleanup is best-effort
     }
   }
