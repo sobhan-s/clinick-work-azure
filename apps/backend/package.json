@@ -5,7 +5,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "db:init": "node src/database/init.ts"
+    "db:init": "tsx src/database/init.ts"
   },
   "dependencies": {
     "@azure/identity": "^4.13.3",
@@ -13,9 +13,7 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "groq-sdk": "^1.6.0",
     "multer": "^2.4.0",
-    "pdf2json": "^4.0.3",
     "pg": "^8.23.0",
     "uuid": "^14.0.2"
   },
