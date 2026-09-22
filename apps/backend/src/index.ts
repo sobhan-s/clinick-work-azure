@@ -1,3 +1,8 @@
+import { useAzureMonitor } from '@azure/monitor-opentelemetry';
+
+// Initialize Application Insights early
+useAzureMonitor();
+
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
