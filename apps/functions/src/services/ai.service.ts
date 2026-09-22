@@ -34,9 +34,9 @@ import Groq from 'groq-sdk';
 import dotenv from 'dotenv';
 import path from 'path';
 import { ClinicalExtractionResult } from '../types/ai.types';
-import { containerClient } from '../utils/blob';
-
-const PDFParser = require('pdf2json');
+import { containerClient } from './storage.service';
+import { DocumentAnalysisClient } from "@azure/ai-form-recognizer";
+import { DefaultAzureCredential } from "@azure/identity";
 
 dotenv.config({ path: path.resolve(__dirname, '../../../../.env') });
 
@@ -108,31 +108,40 @@ Rules:
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 /**
- * Extract raw text from a PDF file using pdf2json from a memory buffer.
- * Returns null if the file is not readable or too short (scanned PDF).
+ * Extract raw text from a PDF file using Azure AI Document Intelligence.
+ * Uses Managed Identity (DefaultAzureCredential).
  */
 async function extractTextFromPdf(pdfBuffer: Buffer): Promise<string | null> {
-  return new Promise((resolve) => {
-    const pdfParser = new PDFParser(null, 1); // 1 = raw text mode
+  const endpoint = process.env.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT;
+  if (!endpoint) {
+    throw new Error('AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT is missing from environment variables.');
+  }
 
-    pdfParser.on('pdfParser_dataError', (errData: any) => {
-      console.error(`[AI Service] pdf2json error: ${errData.parserError}`);
-      resolve(null);
-    });
+  try {
+    const credential = new DefaultAzureCredential();
+    const client = new DocumentAnalysisClient(endpoint, credential);
 
-    pdfParser.on('pdfParser_dataReady', () => {
-      const text = pdfParser.getRawTextContent();
-      if (!text || text.trim().length < MIN_TEXT_LENGTH) {
-        // Text too short — likely a scanned/image PDF.
-        // In Stage 7 this will trigger OCR; for now we surface the issue.
-        resolve(null);
-      } else {
-        resolve(text);
+    console.log(`[AI Service] Sending document to Azure Document Intelligence for OCR...`);
+    const poller = await client.beginAnalyzeDocument("prebuilt-read", pdfBuffer);
+    const { pages } = await poller.pollUntilDone();
+
+    if (!pages || pages.length === 0) {
+      return null;
+    }
+
+    // Stitch all lines from all pages into a single string
+    let extractedText = '';
+    for (const page of pages) {
+      if (page.lines) {
+        extractedText += page.lines.map(line => line.content).join('\n') + '\n\n';
       }
-    });
+    }
 
-    pdfParser.parseBuffer(pdfBuffer);
-  });
+    return extractedText.trim();
+  } catch (err: any) {
+    console.error(`[AI Service] Document Intelligence error:`, err.message);
+    return null;
+  }
 }
 
 /**
