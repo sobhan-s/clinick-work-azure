@@ -1,0 +1,31 @@
+{
+  "name": "functions",
+  "version": "1.0.0",
+  "description": "Azure Functions for ClinicWorks Phase 2",
+  "main": "dist/src/functions/*.js",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "clean": "rimraf dist",
+    "prestart": "npm run clean && npm run build",
+    "start": "func start",
+    "test": "echo \"No tests yet...\""
+  },
+  "dependencies": {
+    "@azure/ai-form-recognizer": "^5.1.0",
+    "@azure/functions": "^4.16.5",
+    "@azure/identity": "^4.0.0",
+    "@azure/storage-blob": "^12.17.0",
+    "dotenv": "^16.3.1",
+    "groq-sdk": "^0.3.3",
+    "pg": "^8.11.3",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "22",
+    "@types/pg": "^8.10.2",
+    "@types/uuid": "^9.0.2",
+    "rimraf": "^5.0.0",
+    "typescript": "^5.0.0"
+  }
+}
