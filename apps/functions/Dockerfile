@@ -1,3 +1,4 @@
+# Trigger CI pipeline for Azure Functions
 FROM node:22-alpine AS builder
 
 WORKDIR /app
