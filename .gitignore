@@ -27,3 +27,5 @@ dist-ssr
 apps/backend/uploads
 .turbodeploy/
 **/*.zip
+
+deploy
