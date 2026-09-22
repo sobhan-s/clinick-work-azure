@@ -21,8 +21,6 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { DocumentRepository } from '../repositories/document.repository';
-import { AiService } from './ai.service';
-import { applyBusinessRules } from './rules.engine';
 import { containerClient } from '../utils/blob';
 
 // ─── Service ──────────────────────────────────────────────────────────────
@@ -30,7 +28,8 @@ import { containerClient } from '../utils/blob';
 export class DocumentService {
 
   /**
-   * Full upload-and-process workflow for a new document.
+   * Upload file to blob storage and create initial database records.
+   * Processing is handled asynchronously by Azure Logic Apps -> Functions.
    */
   static async processDocument(
     fileName: string,
@@ -64,36 +63,16 @@ export class DocumentService {
       correlation_id:     correlationId,
     });
 
-    // ── 4 & 5. AI extraction + Rules engine ──────────────────────────────
-    const decision = await DocumentService._runProcessingPipeline(
-      document.id!,
-      storedFileName,
-      fileName,
-      1,
-      correlationId
-    );
+    console.log(`${label} Upload complete. Document queued for processing via Logic App.`);
 
-    // ── 6. Update processing result with final decision ───────────────────
-    const finalResult = await DocumentRepository.updateProcessingResult(processingResult.id!, {
-      document_type:    decision.documentType,
-      extracted_measure: decision.extractedMeasure,
-      measure_date:     decision.measureDate,
-      status:           decision.status,
-      confidence_score: decision.confidenceScore,
-      error_code:       decision.errorCode,
-      error_message:    decision.errorMessage,
-      processed_at:     new Date(),
-    });
-
-    console.log(`${label} Processing complete → ${decision.status} (confidence: ${decision.confidenceScore})`);
-
-    return { document, result: finalResult, correlationId };
+    return { document, result: processingResult, correlationId };
   }
 
   /**
    * Retry a previously failed or needs-review document.
-   * Fetches the existing document record, increments the attempt number,
-   * and runs the full extraction + rules pipeline again.
+   * Increments the attempt number and sets status back to PROCESSING.
+   * Note: You would typically trigger the Azure Function HTTP endpoint here, 
+   * or re-upload the blob to trigger the Logic App again.
    */
   static async retryDocument(documentId: string): Promise<any> {
     const correlationId = uuidv4();
@@ -105,19 +84,11 @@ export class DocumentService {
       throw new Error(`Document not found: ${documentId}`);
     }
 
-    // Check the file still exists in Blob Storage
-    const blobClient = containerClient.getBlockBlobClient(document.storage_path);
-    if (!(await blobClient.exists())) {
-      throw new Error(
-        `Original file no longer exists in Blob Storage at ${document.storage_path}. Cannot retry.`
-      );
-    }
-
     // Get latest attempt number and increment
     const latestAttempt = await DocumentRepository.getLatestAttemptNumber(documentId);
     const nextAttempt = latestAttempt + 1;
 
-    console.log(`${label} Retrying document ${documentId}, attempt #${nextAttempt}`);
+    console.log(`${label} Queuing retry for document ${documentId}, attempt #${nextAttempt}`);
 
     // Create a new PROCESSING result for this attempt
     const processingResult = await DocumentRepository.createProcessingResult({
@@ -127,67 +98,20 @@ export class DocumentService {
       correlation_id:     correlationId,
     });
 
-    // Run the pipeline again
-    const decision = await DocumentService._runProcessingPipeline(
-      documentId,
-      document.storage_path,
-      document.document_name,
-      nextAttempt,
-      correlationId
-    );
-
-    const finalResult = await DocumentRepository.updateProcessingResult(processingResult.id!, {
-      document_type:    decision.documentType,
-      extracted_measure: decision.extractedMeasure,
-      measure_date:     decision.measureDate,
-      status:           decision.status,
-      confidence_score: decision.confidenceScore,
-      error_code:       decision.errorCode,
-      error_message:    decision.errorMessage,
-      processed_at:     new Date(),
-    });
-
-    console.log(`${label} Retry complete → ${decision.status}`);
-    return { document, result: finalResult, correlationId };
-  }
-
-  /**
-   * Core pipeline: AI extraction → clinical rules → decision.
-   * Used by both processDocument() and retryDocument().
-   * Returns a ProcessingDecision (never throws — failures are caught and
-   * returned as a FAILED decision so the DB record is always updated).
-   */
-  private static async _runProcessingPipeline(
-    documentId:    string,
-    blobName:      string,
-    fileName:      string,
-    attempt:       number,
-    correlationId: string
-  ) {
-    const label = `[Pipeline][${correlationId}]`;
-
+    // Trigger Azure Function HTTP endpoint directly via fetch to start retry
+    const azureFunctionUrl = process.env.AZURE_FUNCTION_URL || "https://func-clinicworks-docprocessor-dev-ci-bpa9edera7azbccr.centralindia-01.azurewebsites.net/api/process-document";
     try {
-      // ── AI Extraction ─────────────────────────────────────────────────
-      const extraction = await AiService.extractFromDocument(blobName, fileName, correlationId);
-
-      // ── Business Rules ────────────────────────────────────────────────
-      const decision = applyBusinessRules(extraction, fileName, correlationId);
-
-      return decision;
-
-    } catch (error: any) {
-      console.error(`${label} Pipeline error on attempt ${attempt}:`, error.message);
-
-      return {
-        documentType:     null,
-        extractedMeasure: null,
-        measureDate:      null,
-        status:           'FAILED' as const,
-        confidenceScore:  0,
-        errorCode:        'PIPELINE_ERROR',
-        errorMessage:     cleanErrorMessage(error.message ?? 'Unknown processing error'),
-      };
+      await fetch(azureFunctionUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blobName: document.storage_path })
+      });
+      console.log(`${label} Triggered Azure Function for retry via HTTP`);
+    } catch (err: any) {
+      console.error(`${label} Failed to trigger Azure Function retry:`, err.message);
     }
+
+    return { document, result: processingResult, correlationId };
   }
 
   /**
@@ -213,29 +137,7 @@ export class DocumentService {
       await blobClient.deleteIfExists();
     } catch (err: any) {
       console.error(`Failed to delete blob ${document.storage_path}:`, err.message);
-      // Non-fatal — DB record is deleted, file cleanup is best-effort
     }
   }
 }
 
-// ─── Helper ──────────────────────────────────────────────────────────────────
-/**
- * Strip raw JSON blobs from Groq/API error messages so users see
- * a clean, human-readable description instead of:
- *   "404 {"error":{"message":"The model..."}}"
- */
-function cleanErrorMessage(raw: string): string {
-  try {
-    // Try to extract the JSON part and get the human message inside
-    const jsonStart = raw.indexOf('{');
-    if (jsonStart !== -1) {
-      const parsed = JSON.parse(raw.slice(jsonStart));
-      const msg = parsed?.error?.message ?? parsed?.message;
-      if (msg && typeof msg === 'string') return msg;
-    }
-  } catch {
-    // Not parseable — fall through
-  }
-  // Truncate at 120 chars to avoid overwhelming the UI
-  return raw.length > 120 ? raw.slice(0, 117) + '…' : raw;
-}
