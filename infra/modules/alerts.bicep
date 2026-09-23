@@ -1,7 +1,6 @@
 param actionGroupName string
 param alertEmailAddress string
 param backendAppId string
-param appInsightsId string
 
 resource actionGroup 'Microsoft.Insights/actionGroups@2024-10-01-preview' = {
   name: actionGroupName
@@ -35,6 +34,7 @@ resource backendCpuAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
       'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
       allOf: [
         {
+          criterionType: 'StaticThresholdCriterion'
           name: 'Metric1'
           metricNamespace: 'Microsoft.Web/sites'
           metricName: 'CpuTime'

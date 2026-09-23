@@ -104,6 +104,5 @@ module alerts 'modules/alerts.bicep' = {
     actionGroupName: actionGroupName
     alertEmailAddress: alertEmailAddress
     backendAppId: webapp.outputs.backendAppId
-    appInsightsId: monitoring.outputs.appInsightsId
   }
 }

@@ -20,7 +20,7 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2024-11-01' = {
 resource backendApp 'Microsoft.Web/sites@2024-11-01' = {
   name: backendAppName
   location: location
-  kind: 'app,linux,container'
+  kind: 'app,linux'
   identity: {
     type: 'SystemAssigned'
   }
