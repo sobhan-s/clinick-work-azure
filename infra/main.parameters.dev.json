@@ -1,0 +1,54 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "centralindia"
+    },
+    "envName": {
+      "value": "dev"
+    },
+    "backendAppName": {
+      "value": "app-clinicworks-backend-dev"
+    },
+    "frontendAppName": {
+      "value": "app-clinicworks-frontend-dev-centralindia"
+    },
+    "functionAppName": {
+      "value": "func-clinicworks-docprocessor-dev-ci"
+    },
+    "appServicePlanName": {
+      "value": "asp-clinicworks-dev-centralindia"
+    },
+    "frontendAppServicePlanName": {
+      "value": "asp-clinicworks-frontend-dev-centralindia"
+    },
+    "functionAppServicePlanName": {
+      "value": "ASP-rgclinicworksdevcentralindia-983c"
+    },
+    "keyVaultName": {
+      "value": "kv-clinicworks-dev-ci"
+    },
+    "storageAccountName": {
+      "value": "stclinicworksdevcentrali"
+    },
+    "postgresServerName": {
+      "value": "psql-clinicwork-dev-ci"
+    },
+    "logAnalyticsWorkspaceName": {
+      "value": "ac2c3ea2-efa2-4df1-bfaf-1bea206f8ee2-rg-clinicworks-dev-c-CID"
+    },
+    "appInsightsName": {
+      "value": "appi-clinicworks-backendinsights-dev-ci"
+    },
+    "actionGroupName": {
+      "value": "ag-incident-alerts-dev-ci"
+    },
+    "alertEmailAddress": {
+      "value": "onlylearn711@gmail.com"
+    },
+    "docIntelName": {
+      "value": "docintel-clinicworks-dev-ci"
+    }
+  }
+}
