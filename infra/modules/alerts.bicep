@@ -4,7 +4,7 @@ param backendAppServicePlanId string
 
 resource actionGroup 'Microsoft.Insights/actionGroups@2024-10-01-preview' = {
   name: actionGroupName
-  location: 'Global'
+  location: 'centralindia'
   properties: {
     groupShortName: 'DevCI-alert'
     enabled: true
