@@ -1,6 +1,6 @@
 param actionGroupName string
 param alertEmailAddress string
-param backendAppId string
+param backendAppServicePlanId string
 
 resource actionGroup 'Microsoft.Insights/actionGroups@2024-10-01-preview' = {
   name: actionGroupName
@@ -10,7 +10,7 @@ resource actionGroup 'Microsoft.Insights/actionGroups@2024-10-01-preview' = {
     enabled: true
     emailReceivers: [
       {
-        name: 'Email DevOps Team'
+        name: 'Email DevOps Team_-EmailAction-'
         emailAddress: alertEmailAddress
         useCommonAlertSchema: false
       }
@@ -22,13 +22,15 @@ resource backendCpuAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
   name: 'Backend-High-CPU-Alert'
   location: 'Global'
   properties: {
-    description: 'Alert when Backend CPU goes over 85%'
-    severity: 1
+    severity: 0
     enabled: true
+    autoMitigate: true
+    targetResourceType: 'Microsoft.Web/serverFarms'
+    targetResourceRegion: 'centralindia'
     scopes: [
-      backendAppId
+      backendAppServicePlanId
     ]
-    evaluationFrequency: 'PT5M'
+    evaluationFrequency: 'PT1M'
     windowSize: 'PT5M'
     criteria: {
       'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
@@ -36,11 +38,12 @@ resource backendCpuAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
         {
           criterionType: 'StaticThresholdCriterion'
           name: 'Metric1'
-          metricNamespace: 'Microsoft.Web/sites'
-          metricName: 'CpuTime'
+          metricNamespace: 'Microsoft.Web/serverFarms'
+          metricName: 'CpuPercentage'
           operator: 'GreaterThan'
           threshold: 85
           timeAggregation: 'Average'
+          skipMetricValidation: false
         }
       ]
     }

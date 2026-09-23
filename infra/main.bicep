@@ -13,7 +13,6 @@ param functionAppServicePlanName string
 param keyVaultName string
 param storageAccountName string
 param postgresServerName string
-param containerRegistryName string
 param logAnalyticsWorkspaceName string
 param appInsightsName string
 param actionGroupName string
@@ -82,7 +81,7 @@ module webapp 'modules/webapp.bicep' = {
     frontendAppServicePlanName: frontendAppServicePlanName
     backendAppName: backendAppName
     frontendAppName: frontendAppName
-    containerRegistryName: containerRegistryName
+    appInsightsName: appInsightsName
   }
 }
 
@@ -93,9 +92,6 @@ module functionapp 'modules/functionapp.bicep' = {
     location: location
     functionAppName: functionAppName
     appServicePlanName: functionAppServicePlanName
-    storageAccountName: storageAccountName
-    appInsightsInstrumentationKey: monitoring.outputs.appInsightsInstrumentationKey
-    appInsightsConnectionString: monitoring.outputs.appInsightsConnectionString
   }
 }
 
@@ -105,6 +101,6 @@ module alerts 'modules/alerts.bicep' = {
   params: {
     actionGroupName: actionGroupName
     alertEmailAddress: alertEmailAddress
-    backendAppId: webapp.outputs.backendAppId
+    backendAppServicePlanId: webapp.outputs.appServicePlanId
   }
 }

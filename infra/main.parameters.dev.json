@@ -35,9 +35,6 @@
     "postgresServerName": {
       "value": "psql-clinicwork-dev-ci"
     },
-    "containerRegistryName": {
-      "value": "crclinicworksdevci"
-    },
     "logAnalyticsWorkspaceName": {
       "value": "ac2c3ea2-efa2-4df1-bfaf-1bea206f8ee2-rg-clinicworks-dev-c-CID"
     },

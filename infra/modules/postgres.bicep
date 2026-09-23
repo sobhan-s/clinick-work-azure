@@ -17,6 +17,10 @@ resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2026-04-01-pr
     administratorLoginPassword: adminPassword
     storage: {
       storageSizeGB: 32
+      autoGrow: 'Disabled'
+      iops: 120
+      tier: 'P4'
+      type: 'Premium_LRS'
     }
     highAvailability: {
       mode: 'Disabled'
@@ -24,6 +28,20 @@ resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2026-04-01-pr
     backup: {
       backupRetentionDays: 7
       geoRedundantBackup: 'Disabled'
+    }
+    authConfig: {
+      activeDirectoryAuth: 'Enabled'
+      tenantId: subscription().tenantId
+    }
+    dataEncryption: {
+      type: 'SystemManaged'
+    }
+    network: {
+      publicNetworkAccess: 'Enabled'
+    }
+    replicationRole: 'Primary'
+    replica: {
+      role: 'Primary'
     }
   }
 }

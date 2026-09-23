@@ -14,5 +14,9 @@ resource formRecognizer 'Microsoft.CognitiveServices/accounts@2026-05-15-preview
   properties: {
     customSubDomainName: docIntelName
     publicNetworkAccess: 'Enabled'
+    allowProjectManagement: false
+    networkAcls: {
+      defaultAction: 'Allow'
+    }
   }
 }
