@@ -29,7 +29,7 @@ resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2026-04-01-pr
       backupRetentionDays: 7
       geoRedundantBackup: 'Disabled'
     }
-    authentication: {
+    authConfig: {
       activeDirectoryAuth: 'Enabled'
       passwordAuth: 'Enabled'
       tenantId: subscription().tenantId
