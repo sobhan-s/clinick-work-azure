@@ -44,8 +44,7 @@ jobs:
           resourceGroupName: ${{ env.AZURE_RESOURCE_GROUP }}
           template: ./infra/main.bicep
           parameters: >
-            envName=${{ github.event.inputs.environmentName || 'dev' }}
-            alertEmailAddress=${{ env.DEVOPS_ALERT_EMAIL }}
+            ./infra/main.parameters.${{ github.event.inputs.environmentName || 'dev' }}.json
             dbAdminUser=${{ env.DB_ADMIN_USER }}
             dbAdminPassword=${{ env.DB_ADMIN_PASSWORD }}
           failOnStdErr: false

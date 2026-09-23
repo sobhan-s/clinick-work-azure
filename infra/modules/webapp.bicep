@@ -4,27 +4,25 @@ param backendAppName string
 param frontendAppName string
 param containerRegistryName string
 
-// 1. App Service Plan (Linux)
-resource appServicePlan 'Microsoft.Web/serverfarms@2022-09-01' = {
+resource appServicePlan 'Microsoft.Web/serverfarms@2024-11-01' = {
   name: appServicePlanName
   location: location
   kind: 'linux'
-  properties: {
-    reserved: true // Required for Linux plan
-  }
   sku: {
-    name: 'B1' // Basic Tier (adjust as needed for production)
+    name: 'B1'
     tier: 'Basic'
+  }
+  properties: {
+    reserved: true
   }
 }
 
-// 2. Backend Web App (Containerized)
-resource backendApp 'Microsoft.Web/sites@2022-09-01' = {
+resource backendApp 'Microsoft.Web/sites@2024-11-01' = {
   name: backendAppName
   location: location
   kind: 'app,linux,container'
   identity: {
-    type: 'SystemAssigned' // We enabled Managed Identity earlier
+    type: 'SystemAssigned'
   }
   properties: {
     serverFarmId: appServicePlan.id
@@ -37,15 +35,14 @@ resource backendApp 'Microsoft.Web/sites@2022-09-01' = {
         }
         {
           name: 'WEBSITES_PORT'
-          value: '8080' // Required because Azure overrides to 8080
+          value: '8080'
         }
       ]
     }
   }
 }
 
-// 3. Frontend Web App (Containerized)
-resource frontendApp 'Microsoft.Web/sites@2022-09-01' = {
+resource frontendApp 'Microsoft.Web/sites@2024-11-01' = {
   name: frontendAppName
   location: location
   kind: 'app,linux,container'

@@ -1,87 +1,109 @@
-// ---------------------------------------------------------------------------
-// Main Bicep Orchestrator
-// This file coordinates the deployment of all modular resources in the project
-// ---------------------------------------------------------------------------
+targetScope = 'resourceGroup'
 
-@description('The Azure region where all resources will be deployed')
-param location string = resourceGroup().location
+param location string
+param envName string
 
-@description('The environment name (e.g., dev, test, prod)')
-param envName string = 'dev'
-
-@description('The email address to receive DevOps CPU alerts')
+// Resource Names
+param backendAppName string
+param frontendAppName string
+param functionAppName string
+param appServicePlanName string
+param functionAppServicePlanName string
+param keyVaultName string
+param storageAccountName string
+param postgresServerName string
+param containerRegistryName string
+param logAnalyticsWorkspaceName string
+param appInsightsName string
+param actionGroupName string
 param alertEmailAddress string
+param docIntelName string
 
-// We parameterize the existing names so Bicep adopts them without destroying them
-param existingContainerRegistryName string = 'crclinicworksdevci'
-param existingBackendAppName string = 'app-clinicworks-backend-${envName}'
-param existingFrontendAppName string = 'app-clinicworks-frontend-${envName}-centralindia'
-param existingFunctionAppName string = 'func-clinicworks-${envName}'
-param existingDatabaseServerName string = 'psql-clinicworks-${envName}'
-
-// Database Secrets (Passed in securely from GitHub Actions)
+// Secrets (Passed from CI/CD, NOT stored in parameters.json)
 param dbAdminUser string
 @secure()
 param dbAdminPassword string
 
-// ==========================================
-// 1. App Service Plan & Web Apps
-// ==========================================
-module webApps 'modules/appservice.bicep' = {
-  name: 'deploy-web-apps'
-  params: {
-    location: location
-    appServicePlanName: 'ASP-clinicworks-${envName}'
-    backendAppName: existingBackendAppName
-    frontendAppName: existingFrontendAppName
-    containerRegistryName: existingContainerRegistryName
-  }
-}
-
-// ==========================================
-// 2. Monitoring (App Insights & Alerts)
-// ==========================================
+// 1. Monitoring (App Insights & Log Analytics)
 module monitoring 'modules/monitoring.bicep' = {
-  name: 'deploy-monitoring'
+  name: 'deploy-monitoring-${envName}'
   params: {
     location: location
-    appInsightsName: 'appi-clinicworks-${envName}'
-    logAnalyticsWorkspaceName: 'law-clinicworks-${envName}'
-    actionGroupName: 'ag-clinicworks-devops'
-    actionGroupEmailAddress: alertEmailAddress
-    backendAppId: webApps.outputs.backendAppId
-    functionAppId: functions.outputs.functionAppId
+    logAnalyticsWorkspaceName: logAnalyticsWorkspaceName
+    appInsightsName: appInsightsName
   }
 }
 
-// ==========================================
-// 3. Azure Functions & Storage
-// ==========================================
-module functions 'modules/functions.bicep' = {
-  name: 'deploy-functions'
+// 2. Key Vault
+module keyvault 'modules/keyvault.bicep' = {
+  name: 'deploy-keyvault-${envName}'
   params: {
     location: location
-    functionAppName: existingFunctionAppName
-    appServicePlanId: resourceId('Microsoft.Web/serverfarms', 'ASP-clinicworks-${envName}')
-    storageAccountName: 'stclinicworks${envName}'
-    applicationInsightsConnectionString: monitoring.outputs.appInsightsConnectionString
-    applicationInsightsInstrumentationKey: monitoring.outputs.appInsightsInstrumentationKey
+    keyVaultName: keyVaultName
   }
-  dependsOn: [
-    webApps // Ensure the App Service Plan exists first
-  ]
 }
 
-// ==========================================
+// 3. Storage Account
+module storage 'modules/storage.bicep' = {
+  name: 'deploy-storage-${envName}'
+  params: {
+    location: location
+    storageAccountName: storageAccountName
+  }
+}
+
 // 4. PostgreSQL Database
-// ==========================================
-module database 'modules/database.bicep' = {
-  name: 'deploy-database'
+module postgres 'modules/postgres.bicep' = {
+  name: 'deploy-postgres-${envName}'
   params: {
-    location: location
-    serverName: existingDatabaseServerName
-    databaseName: 'clinicworks'
+    location: 'canadacentral' // Based on export data
+    serverName: postgresServerName
     adminUsername: dbAdminUser
     adminPassword: dbAdminPassword
+  }
+}
+
+// 5. AI Services (Document Intelligence)
+module ai 'modules/ai.bicep' = {
+  name: 'deploy-ai-${envName}'
+  params: {
+    location: location
+    docIntelName: docIntelName
+  }
+}
+
+// 6. Web Apps (Frontend & Backend)
+module webapp 'modules/webapp.bicep' = {
+  name: 'deploy-webapps-${envName}'
+  params: {
+    location: location
+    appServicePlanName: appServicePlanName
+    backendAppName: backendAppName
+    frontendAppName: frontendAppName
+    containerRegistryName: containerRegistryName
+  }
+}
+
+// 7. Azure Functions
+module functionapp 'modules/functionapp.bicep' = {
+  name: 'deploy-functionapp-${envName}'
+  params: {
+    location: location
+    functionAppName: functionAppName
+    appServicePlanName: functionAppServicePlanName
+    storageAccountName: storageAccountName
+    appInsightsInstrumentationKey: monitoring.outputs.appInsightsInstrumentationKey
+    appInsightsConnectionString: monitoring.outputs.appInsightsConnectionString
+  }
+}
+
+// 8. Alerts & Action Groups
+module alerts 'modules/alerts.bicep' = {
+  name: 'deploy-alerts-${envName}'
+  params: {
+    actionGroupName: actionGroupName
+    alertEmailAddress: alertEmailAddress
+    backendAppId: webapp.outputs.backendAppId
+    appInsightsId: monitoring.outputs.appInsightsId
   }
 }
