@@ -1,11 +1,25 @@
 param location string
 param appServicePlanName string
+param frontendAppServicePlanName string
 param backendAppName string
 param frontendAppName string
 param containerRegistryName string
 
 resource appServicePlan 'Microsoft.Web/serverfarms@2024-11-01' = {
   name: appServicePlanName
+  location: location
+  kind: 'linux'
+  sku: {
+    name: 'B1'
+    tier: 'Basic'
+  }
+  properties: {
+    reserved: true
+  }
+}
+
+resource frontendAppServicePlan 'Microsoft.Web/serverfarms@2024-11-01' = {
+  name: frontendAppServicePlanName
   location: location
   kind: 'linux'
   sku: {
@@ -45,9 +59,9 @@ resource backendApp 'Microsoft.Web/sites@2024-11-01' = {
 resource frontendApp 'Microsoft.Web/sites@2024-11-01' = {
   name: frontendAppName
   location: location
-  kind: 'app,linux,container'
+  kind: 'app,linux'
   properties: {
-    serverFarmId: appServicePlan.id
+    serverFarmId: frontendAppServicePlan.id
     siteConfig: {
       linuxFxVersion: 'DOCKER|${containerRegistryName}.azurecr.io/clinicworks-frontend:latest'
       appSettings: [

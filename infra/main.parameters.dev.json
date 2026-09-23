@@ -20,6 +20,9 @@
     "appServicePlanName": {
       "value": "asp-clinicworks-dev-centralindia"
     },
+    "frontendAppServicePlanName": {
+      "value": "asp-clinicworks-frontend-dev-centralindia"
+    },
     "functionAppServicePlanName": {
       "value": "ASP-rgclinicworksdevcentralindia-983c"
     },

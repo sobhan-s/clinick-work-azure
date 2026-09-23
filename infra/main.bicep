@@ -8,6 +8,7 @@ param backendAppName string
 param frontendAppName string
 param functionAppName string
 param appServicePlanName string
+param frontendAppServicePlanName string
 param functionAppServicePlanName string
 param keyVaultName string
 param storageAccountName string
@@ -78,6 +79,7 @@ module webapp 'modules/webapp.bicep' = {
   params: {
     location: location
     appServicePlanName: appServicePlanName
+    frontendAppServicePlanName: frontendAppServicePlanName
     backendAppName: backendAppName
     frontendAppName: frontendAppName
     containerRegistryName: containerRegistryName
