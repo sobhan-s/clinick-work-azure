@@ -1,11 +1,5 @@
-import { useAzureMonitor } from '@azure/monitor-opentelemetry';
-
-// Initialize Application Insights early (only if connection string exists)
-if (process.env.APPLICATIONINSIGHTS_CONNECTION_STRING) {
-  useAzureMonitor();
-} else {
-  console.warn("Skipping Azure Monitor initialization: APPLICATIONINSIGHTS_CONNECTION_STRING is missing.");
-}
+import { initTelemetry } from "./config/telemetry";
+initTelemetry();
 
 import express from 'express';
 import cors from 'cors';
